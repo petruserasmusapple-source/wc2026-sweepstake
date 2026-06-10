@@ -1,73 +1,65 @@
-// Netlify serverless function — securely proxies API-Football calls
-// Your API key lives ONLY here as an environment variable — never in the frontend
+const fetch = require("node-fetch");
 
-exports.handler = async function(event, context) {
-  const API_KEY = process.env.API_FOOTBALL_KEY;
-  const BASE    = "https://v3.football.api-sports.io";
-  const LEAGUE  = 1;      // FIFA World Cup
-  const SEASON  = 2026;
+// Uses openfootball/worldcup.json on GitHub Raw
+// Completely free, no API key, no auth required
+// Updated by the community as scores come in
 
-  const headers = {
-    "x-apisports-key": API_KEY,
-    "Content-Type": "application/json"
-  };
+const FIXTURES_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
+const GROUPS_URL   = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.groups.json";
 
-  const cors = {
+exports.handler = async function(event) {
+  const resHeaders = {
+    "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json"
+    "Access-Control-Allow-Headers": "Content-Type"
   };
 
-  const type = event.queryStringParameters?.type || "fixtures";
+  const type = (event.queryStringParameters && event.queryStringParameters.type) || "fixtures";
 
   try {
-    let url;
+    let url = type === "groups" ? GROUPS_URL : FIXTURES_URL;
 
-    if (type === "fixtures") {
-      // All fixtures — NS = not started, includes upcoming matches
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}`;
-    } else if (type === "upcoming") {
-      // Only upcoming (not started) fixtures
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=NS`;
-    } else if (type === "live") {
-      // Only live fixtures
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
-    } else if (type === "finished") {
-      // Only finished fixtures
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=FT-AET-PEN`;
-    } else if (type === "today") {
-      // Today's fixtures
-      const today = new Date().toISOString().split("T")[0];
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&date=${today}`;
-    } else if (type === "standings") {
-      url = `${BASE}/standings?league=${LEAGUE}&season=${SEASON}`;
-    } else if (type === "topscorers") {
-      url = `${BASE}/players/topscorers?league=${LEAGUE}&season=${SEASON}`;
-    } else {
-      return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Unknown type" }) };
-    }
+    const apiRes = await fetch(url);
+    const text   = await apiRes.text();
 
-    const res  = await fetch(url, { headers });
-    const data = await res.json();
-
-    // Return error details if API responds with errors
-    if (data.errors && Object.keys(data.errors).length > 0) {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch(e) {
       return {
         statusCode: 200,
-        headers: cors,
-        body: JSON.stringify({ error: "API error", details: data.errors, response: [] })
+        headers: resHeaders,
+        body: JSON.stringify({ error: "Could not parse JSON from openfootball", raw: text.substring(0, 200) })
       };
+    }
+
+    // For fixtures, apply filtering server-side based on type
+    if (type !== "groups" && data.matches) {
+      const today = new Date().toISOString().split("T")[0];
+
+      if (type === "upcoming") {
+        data.matches = data.matches.filter(m => !m.score || Object.keys(m.score).length === 0);
+      } else if (type === "finished") {
+        data.matches = data.matches.filter(m => m.score && m.score.ft);
+      } else if (type === "today") {
+        data.matches = data.matches.filter(m => m.date === today);
+      } else if (type === "live") {
+        // openfootball doesn't do live scores — return today's matches as proxy
+        data.matches = data.matches.filter(m => m.date === today);
+      }
+      // "fixtures" / "all" returns everything unfiltered
     }
 
     return {
       statusCode: 200,
-      headers: cors,
+      headers: resHeaders,
       body: JSON.stringify(data)
     };
+
   } catch (err) {
     return {
       statusCode: 500,
-      headers: cors,
+      headers: resHeaders,
       body: JSON.stringify({ error: err.message })
     };
   }
