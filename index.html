@@ -128,7 +128,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0a1628;color:#e8eaf0;mi
     <h3>🎲 Run the Draw</h3>
     <button class="draw-btn" id="draw-btn" onclick="runDraw()">🎩 Draw All Teams Now!</button>
     <button class="reset-btn" onclick="resetDraw()">↺ Reset Draw</button>
-    <p class="snote" style="margin-top:8px">Each participant receives one team from each hat. 9 participants, 9 teams per hat — every team is drawn!</p>
+    <p class="snote" style="margin-top:8px">9 participants, 9 teams per hat — every team is drawn! After drawing, copy the results into your Google Sheet Draw tab so everyone sees the same draw.</p>
+    <div id="draw-result-box" style="display:none;margin-top:12px;background:#0a1628;border:1px solid #c9a84c33;border-radius:8px;padding:12px">
+      <p style="font-size:12px;color:#c9a84c;font-weight:700;margin-bottom:8px">✅ DRAW COMPLETE — Copy this into your Google Sheet Draw tab</p>
+      <textarea id="draw-result-text" readonly style="width:100%;height:180px;background:#0f2035;border:1px solid #1e3a5a;border-radius:6px;color:#d0dce8;padding:8px;font-size:11px;font-family:monospace;resize:none"></textarea>
+      <button onclick="copyDraw()" style="margin-top:8px;padding:7px 16px;background:#c9a84c22;border:1px solid #c9a84c;border-radius:6px;color:#c9a84c;font-size:12px;font-weight:600;cursor:pointer">📋 Copy to clipboard</button>
+      <p class="snote" style="margin-top:6px">Paste this into your Google Sheet Draw tab starting from cell A1. Once saved, everyone with the link will see the draw.</p>
+    </div>
   </div>
   <div class="draw-grid" id="participants-grid"></div>
 </div>
@@ -212,33 +218,35 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0a1628;color:#e8eaf0;mi
     <p style="font-size:13px;color:#8ba3c0;margin-bottom:16px">Connect a Google Sheet as the score database. You update scores in the sheet — everyone sees them live on this site.</p>
 
     <div class="setup-box">
-      <h4>Step 1 — Create the Google Sheet</h4>
-      <div class="step"><div class="step-num">1</div><span>Open <strong style="color:#d0dce8">sheets.google.com</strong> and create a new blank spreadsheet named <strong style="color:#d0dce8">WC2026 Sweepstake Scores</strong></span></div>
-      <div class="step"><div class="step-num">2</div><span>In row 1 add these exact headers in columns A–C: <code>id</code> &nbsp; <code>home</code> &nbsp; <code>away</code></span></div>
-      <div class="step"><div class="step-num">3</div><span>Leave all other rows empty for now — you will fill in scores as matches finish (match IDs are shown in the Fixtures tab)</span></div>
+      <h4>Step 1 — Set up the Google Sheet</h4>
+      <div class="step"><div class="step-num">1</div><span>Open your <strong style="color:#d0dce8">WC2026 Sweepstake Scores</strong> Google Sheet</span></div>
+      <div class="step"><div class="step-num">2</div><span><strong style="color:#d0dce8">Sheet1</strong> (Scores tab) — headers in row 1: <code>id</code> &nbsp; <code>home</code> &nbsp; <code>away</code> — you fill this in after each match</span></div>
+      <div class="step"><div class="step-num">3</div><span>Click the <strong style="color:#d0dce8">+</strong> at the bottom to add a second tab — name it exactly <strong style="color:#d0dce8">Draw</strong></span></div>
+      <div class="step"><div class="step-num">4</div><span><strong style="color:#d0dce8">Draw tab</strong> — headers in row 1: <code>participant</code> &nbsp; <code>hat1</code> &nbsp; <code>hat2</code> — then paste the draw results from the Draw tab on this site after running the draw</span></div>
     </div>
 
     <div class="setup-box">
-      <h4>Step 2 — Publish the Sheet</h4>
+      <h4>Step 2 — Publish Both Tabs</h4>
       <div class="step"><div class="step-num">1</div><span>In Google Sheets click <strong style="color:#d0dce8">File → Share → Publish to web</strong></span></div>
-      <div class="step"><div class="step-num">2</div><span>In the first dropdown select <strong style="color:#d0dce8">Sheet1</strong>, in the second select <strong style="color:#d0dce8">Comma-separated values (.csv)</strong></span></div>
-      <div class="step"><div class="step-num">3</div><span>Click <strong style="color:#d0dce8">Publish</strong> → confirm → copy the URL it gives you</span></div>
+      <div class="step"><div class="step-num">2</div><span>First: select <strong style="color:#d0dce8">Sheet1</strong> → <strong style="color:#d0dce8">CSV</strong> → Publish → copy the URL → paste in Scores URL below</span></div>
+      <div class="step"><div class="step-num">3</div><span>Second: select <strong style="color:#d0dce8">Draw</strong> → <strong style="color:#d0dce8">CSV</strong> → Publish → copy the URL → paste in Draw URL below</span></div>
     </div>
 
     <div class="setup-box">
-      <h4>Step 3 — Paste the URL here</h4>
-      <label>Google Sheets CSV publish URL</label>
-      <input type="text" id="sheets-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?gid=0&single=true&output=csv">
-      <button class="save-setup-btn" onclick="saveSheetUrl()">Save & Connect</button>
+      <h4>Step 3 — Paste your URLs here</h4>
+      <label>Scores tab CSV URL (Sheet1 — id, home, away)</label>
+      <input type="text" id="scores-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?gid=0&single=true&output=csv">
+      <label style="margin-top:8px">Draw tab CSV URL (Draw — participant, hat1, hat2)</label>
+      <input type="text" id="draw-url-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?gid=XXXXXXX&single=true&output=csv">
+      <button class="save-setup-btn" onclick="saveSheetUrls()">Save & Connect Both</button>
       <div id="connect-status" style="margin-top:8px;font-size:12px"></div>
     </div>
 
     <div class="setup-box">
-      <h4>Step 4 — Updating Scores (ongoing)</h4>
-      <div class="step"><div class="step-num">1</div><span>When a match finishes, open your Google Sheet</span></div>
-      <div class="step"><div class="step-num">2</div><span>Add a new row: column A = match ID (from Fixtures tab), column B = home score, column C = away score</span></div>
-      <div class="step"><div class="step-num">3</div><span>Save the sheet — everyone's site updates within 30 seconds automatically</span></div>
-      <div class="step"><div class="step-num">4</div><span>Hit <strong style="color:#d0dce8">↻ Refresh</strong> on Fixtures or Standings to pull latest scores immediately</span></div>
+      <h4>Step 4 — Day to Day (ongoing)</h4>
+      <div class="step"><div class="step-num">1</div><span><strong style="color:#d0dce8">After the draw:</strong> run the draw on the Draw tab of this site → copy the results → paste into your Google Sheet Draw tab from cell A1</span></div>
+      <div class="step"><div class="step-num">2</div><span><strong style="color:#d0dce8">After each match:</strong> open Sheet1 → add a new row with match ID, home score, away score</span></div>
+      <div class="step"><div class="step-num">3</div><span>Everyone's site updates automatically within 60 seconds — same scores, same standings, same draw for all 9 colleagues</span></div>
     </div>
   </div>
 
@@ -457,9 +465,9 @@ function saveSheetUrl(){
 function roundPts(r){ return r==='Group Stage'?1:r==='Round of 32'?2:r==='Round of 16'?4:r==='Quarter-final'?6:r==='Semi-final'?10:r==='3rd place'?8:0; }
 
 function calcPoints(){
-  if(!state.drawn) return {};
+  if(!state.assignments.length) return {};
   const pts={};
-  PARTICIPANTS.forEach(p=>{pts[p]=0;});
+  state.assignments.forEach(a=>{pts[a.name]=0;});
   ALL_MATCHES.forEach(m=>{
     const sc=getScore(m.id); if(!sc) return;
     const {h,a}=sc;
@@ -480,43 +488,57 @@ function calcPoints(){
 }
 
 // ═══════════════════ DRAW ═══════════════════
+function getTeamInfo(name){
+  return TOP_TEAMS.find(t=>t.name===name) || BOT_TEAMS.find(t=>t.name===name) || {name, flag:'🏳', rank:'', group:''};
+}
+
 function renderTeamLists(){
   ['top','bot'].forEach(type=>{
     const teams=type==='top'?TOP_TEAMS:BOT_TEAMS;
+    const key=type==='top'?'hat1':'hat2';
     document.getElementById(type+'-list').innerHTML=teams.map(t=>{
-      const asgn=state.drawn?state.assignments.find(a=>a[type+'Team']?.name===t.name):null;
+      const asgn=state.assignments.find(a=>a[key]===t.name);
       return `<div class="team-item"><div class="team-rank">${t.rank}</div><span style="font-size:16px">${t.flag}</span><span class="team-name">${t.name}</span><span class="grp-badge">Grp ${t.group}</span>${asgn?`<span class="team-assigned">→ ${asgn.name}</span>`:''}</div>`;
     }).join('');
   });
 }
 
 function renderParticipants(){
-  document.getElementById('drawn-count').textContent=state.drawn?'9':'0';
+  const drawn = state.assignments.length > 0;
+  document.getElementById('drawn-count').textContent=drawn?state.assignments.length:'0';
   const pts=calcPoints();
-  document.getElementById('participants-grid').innerHTML=PARTICIPANTS.map(p=>{
-    const a=state.assignments.find(x=>x.name===p);
-    return `<div class="p-card ${a?'drawn':''}"><div class="p-name">${p}${a?`<span style="font-size:11px;color:#4caf7d">${pts[p]||0} pts</span>`:''}</div><div class="p-teams">${a?`<span class="tbadge top">${a.topTeam.flag} ${a.topTeam.name}</span>`:'<span class="tbadge empty">Hat 1 —</span>'}${a?`<span class="tbadge bot">${a.bottomTeam.flag} ${a.bottomTeam.name}</span>`:'<span class="tbadge empty">Hat 2 —</span>'}</div></div>`;
-  }).join('');
+  document.getElementById('participants-grid').innerHTML = drawn
+    ? state.assignments.map(a=>{
+        const t1=getTeamInfo(a.hat1), t2=getTeamInfo(a.hat2);
+        return `<div class="p-card drawn"><div class="p-name">${a.name}<span style="font-size:11px;color:#4caf7d">${pts[a.name]||0} pts</span></div><div class="p-teams"><span class="tbadge top">${t1.flag} ${a.hat1}</span><span class="tbadge bot">${t2.flag} ${a.hat2}</span></div></div>`;
+      }).join('')
+    : PARTICIPANTS.map(p=>`<div class="p-card"><div class="p-name">${p}</div><div class="p-teams"><span class="tbadge empty">Hat 1 —</span><span class="tbadge empty">Hat 2 —</span></div></div>`).join('');
 }
 
 function runDraw(){
-  if(state.drawn) return;
+  if(state.assignments.length>0) return;
   const btn=document.getElementById('draw-btn');
   btn.disabled=true; btn.textContent='🎲 Drawing...';
   setTimeout(()=>{
     const sT=shuffle(TOP_TEAMS),sB=shuffle(BOT_TEAMS);
-    state.assignments=PARTICIPANTS.map((p,i)=>({name:p,topTeam:sT[i],bottomTeam:sB[i]}));
-    state.drawn=true; save();
-    btn.textContent='✅ Draw Complete!';
+    const assignments=PARTICIPANTS.map((p,i)=>({name:p,hat1:sT[i].name,hat2:sB[i].name}));
+    // Show result and instructions to enter into sheet
+    const lines = assignments.map(a=>`${a.name},${a.hat1},${a.hat2}`).join('\n');
+    btn.textContent='✅ Draw Complete! — Copy results to Google Sheet';
+    state.assignments=assignments;
     renderTeamLists(); renderParticipants(); renderStandings(); renderFixtures();
+    // Show copy box
+    document.getElementById('draw-result-box').style.display='block';
+    document.getElementById('draw-result-text').value='participant,hat1,hat2\n'+lines;
   },800);
 }
 
 function resetDraw(){
-  if(!confirm('Reset draw? This clears all assignments and scores.')) return;
-  state={drawn:false,assignments:[],scores:{}}; save();
+  if(!confirm('Reset draw? This clears all assignments.')) return;
+  state={assignments:[],scores:{}};
   document.getElementById('draw-btn').disabled=false;
   document.getElementById('draw-btn').textContent='🎩 Draw All Teams Now!';
+  document.getElementById('draw-result-box').style.display='none';
   renderTeamLists(); renderParticipants(); renderStandings(); renderFixtures();
 }
 
@@ -569,17 +591,19 @@ function filterFix(type,btn){
 // ═══════════════════ STANDINGS ═══════════════════
 function renderStandings(){
   const el=document.getElementById('sweep-standings');
-  if(!state.drawn){ el.innerHTML='<div style="color:#4a7a9b;font-size:13px;text-align:center;padding:20px">Complete the draw first.</div>'; return; }
+  if(!state.assignments.length){ el.innerHTML='<div style="color:#4a7a9b;font-size:13px;text-align:center;padding:20px">Draw not completed yet — check back soon!</div>'; return; }
   const pts=calcPoints();
-  const sorted=[...PARTICIPANTS].sort((a,b)=>(pts[b]||0)-(pts[a]||0));
+  const names = state.assignments.map(a=>a.name);
+  const sorted=[...names].sort((a,b)=>(pts[b]||0)-(pts[a]||0));
   const max=Math.max(...sorted.map(p=>pts[p]||0),1);
   const prizes=['$54','$27','$9'];
   el.innerHTML=`<table class="standings-tbl"><thead><tr><th>Pos</th><th>Participant</th><th>Teams</th><th>Points</th><th>Progress</th></tr></thead><tbody>${sorted.map((p,i)=>{
     const a=state.assignments.find(x=>x.name===p);
+    const t1=getTeamInfo(a?.hat1||''), t2=getTeamInfo(a?.hat2||'');
     const sc=pts[p]||0, pct=Math.round((sc/max)*100);
     const rc=i===0?'r1':i===1?'r2':i===2?'r3':'rX';
     const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
-    return `<tr><td><div class="rbadge ${rc}">${medal||i+1}</div></td><td style="color:#d0dce8;font-weight:600">${p}</td><td style="font-size:11px"><span style="color:#c9a84c">${a?.topTeam?.flag} ${a?.topTeam?.name}</span><span style="color:#4a7a9b;margin:0 3px">+</span><span style="color:#6b9fd4">${a?.bottomTeam?.flag} ${a?.bottomTeam?.name}</span></td><td><span class="pts-big">${sc}</span><span style="font-size:10px;color:#c9a84c;margin-left:4px">${prizes[i]||'—'}</span></td><td style="width:90px"><div class="pbar"><div class="pfill" style="width:${pct}%"></div></div></td></tr>`;
+    return `<tr><td><div class="rbadge ${rc}">${medal||i+1}</div></td><td style="color:#d0dce8;font-weight:600">${p}</td><td style="font-size:11px"><span style="color:#c9a84c">${t1.flag} ${a?.hat1}</span><span style="color:#4a7a9b;margin:0 3px">+</span><span style="color:#6b9fd4">${t2.flag} ${a?.hat2}</span></td><td><span class="pts-big">${sc}</span><span style="font-size:10px;color:#c9a84c;margin-left:4px">${prizes[i]||'—'}</span></td><td style="width:90px"><div class="pbar"><div class="pfill" style="width:${pct}%"></div></div></td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -597,28 +621,40 @@ function renderIdReference(){
   document.getElementById('id-reference').innerHTML=html;
 }
 
+// ═══════════════════ COPY DRAW ═══════════════════
+function copyDraw(){
+  const el = document.getElementById('draw-result-text');
+  el.select();
+  document.execCommand('copy');
+  alert('Copied! Now paste into your Google Sheet Draw tab starting from A1.');
+}
+
 // ═══════════════════ NAV ═══════════════════
 function showPage(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   if(el) el.classList.add('active');
-  if(name==='fixtures'||name==='standings') loadScores();
+  if(name==='fixtures'||name==='standings') loadAll();
 }
 
 // ═══════════════════ INIT ═══════════════════
-load();
-sheetUrl = loadUrl();
-if(sheetUrl) document.getElementById('sheets-url-input') && (document.getElementById('sheets-url-input').value=sheetUrl);
+loadUrls();
+// Hardcoded URLs — always use these as defaults
+const HARDCODED_DRAW_URL   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR3IkafBF_ymmNzQuv9ZElR2KJGINENJCQqqeRtdd0KSkEyfe20K04U1uhHgORIlEcMIdLwKAHdw2qs/pub?gid=233425185&single=true&output=csv';
+const HARDCODED_SCORES_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR3IkafBF_ymmNzQuv9ZElR2KJGINENJCQqqeRtdd0KSkEyfe20K04U1uhHgORIlEcMIdLwKAHdw2qs/pub?gid=0&single=true&output=csv';
+if(!drawUrl)   drawUrl   = HARDCODED_DRAW_URL;
+if(!scoresUrl) scoresUrl = HARDCODED_SCORES_URL;
+if(scoresUrl) document.getElementById('scores-url-input') && (document.getElementById('scores-url-input').value=scoresUrl);
+if(drawUrl)   document.getElementById('draw-url-input')   && (document.getElementById('draw-url-input').value=drawUrl);
 renderTeamLists();
 renderParticipants();
 renderStandings();
 renderFixtures();
 renderIdReference();
-if(state.drawn){ document.getElementById('draw-btn').disabled=true; document.getElementById('draw-btn').textContent='✅ Draw Complete!'; }
-if(sheetUrl) loadScores();
+if(scoresUrl||drawUrl) loadAll(true);
 // Auto-refresh every 60 seconds
-setInterval(()=>loadScores(), 60000);
+setInterval(()=>loadAll(), 60000);
 </script>
 </body>
 </html>
