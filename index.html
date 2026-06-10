@@ -128,7 +128,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0a1628;color:#e8eaf0;mi
     <h3>🎲 Run the Draw</h3>
     <button class="draw-btn" id="draw-btn" onclick="runDraw()">🎩 Draw All Teams Now!</button>
     <button class="reset-btn" onclick="resetDraw()">↺ Reset Draw</button>
-    <p class="snote" style="margin-top:8px">Each participant receives one team from each hat. One team per hat will go undrawn.</p>
+    <p class="snote" style="margin-top:8px">Each participant receives one team from each hat. 9 participants, 9 teams per hat — every team is drawn!</p>
   </div>
   <div class="draw-grid" id="participants-grid"></div>
 </div>
@@ -259,14 +259,12 @@ const TOP_TEAMS = [
   {name:'Portugal',    flag:'🇵🇹', rank:5,  group:'K'},
   {name:'Brazil',      flag:'🇧🇷', rank:6,  group:'C'},
   {name:'Netherlands', flag:'🇳🇱', rank:7,  group:'F'},
-  {name:'Morocco',     flag:'🇲🇦', rank:8,  group:'C'},
   {name:'Belgium',     flag:'🇧🇪', rank:9,  group:'G'},
   {name:'Germany',     flag:'🇩🇪', rank:10, group:'E'},
 ];
 const BOT_TEAMS = [
   {name:'New Zealand', flag:'🇳🇿', rank:48, group:'G'},
   {name:'Qatar',       flag:'🇶🇦', rank:47, group:'B'},
-  {name:'Uzbekistan',  flag:'🇺🇿', rank:46, group:'K'},
   {name:'DR Congo',    flag:'🇨🇩', rank:45, group:'K'},
   {name:'Saudi Arabia',flag:'🇸🇦', rank:44, group:'H'},
   {name:'Haiti',       flag:'🇭🇹', rank:43, group:'C'},
