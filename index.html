@@ -426,20 +426,14 @@ async function loadFixtures(force=false) {
       return;
     }
 
-    const fetched = data.response||[];
+    // wc2026api returns { matches: [...] } or { data: [...] } or array directly
+    const fetched = data.matches || data.data || data.results || (Array.isArray(data)?data:[]);
 
-    // For specific filters store separately, for 'all' and 'ours' we need the full set
-    if(currentFilter==='all'||currentFilter==='ours') {
-      allFixtures=fetched;
-      sessionStorage.setItem('wc26_fixtures',JSON.stringify(allFixtures));
-      sessionStorage.setItem('wc26_fixtures_time',Date.now().toString());
-    } else {
-      // Merge into allFixtures by fixture id to avoid duplicates
-      const ids=new Set(allFixtures.map(f=>f.fixture.id));
-      fetched.forEach(f=>{ if(!ids.has(f.fixture.id)) allFixtures.push(f); });
-    }
+    allFixtures=fetched;
+    sessionStorage.setItem('wc26_fixtures',JSON.stringify(allFixtures));
+    sessionStorage.setItem('wc26_fixtures_time',Date.now().toString());
 
-    renderFixtures(fetched);
+    renderFixtures();
     document.getElementById('fixtures-updated').textContent=
       'Last updated: '+new Date().toLocaleTimeString()+' · '+fetched.length+' matches loaded';
     if(state.drawn) autoCalculatePoints();
@@ -454,21 +448,26 @@ function renderFixtures(fixturesOverride) {
   let filtered=fixturesOverride||allFixtures;
   const ourTeams=ourTeamNames();
 
-  if(currentFilter==='live') filtered=allFixtures.filter(f=>f.fixture.status.short==='1H'||f.fixture.status.short==='2H'||f.fixture.status.short==='HT');
+  // wc2026api uses status: "scheduled", "live", "finished"
+  if(currentFilter==='live') filtered=allFixtures.filter(f=>f.status==='live'||f.status==='in_progress');
   else if(currentFilter==='today') filtered=allFixtures.filter(f=>{
-    const d=new Date(f.fixture.date); return d.toDateString()===now.toDateString();
+    const d=new Date(f.kickoff_utc||f.date||f.kickoff);
+    return d.toDateString()===now.toDateString();
   });
-  else if(currentFilter==='upcoming') filtered=allFixtures.filter(f=>f.fixture.status.short==='NS');
-  else if(currentFilter==='finished') filtered=allFixtures.filter(f=>f.fixture.status.short==='FT'||f.fixture.status.short==='AET'||f.fixture.status.short==='PEN');
+  else if(currentFilter==='upcoming') filtered=allFixtures.filter(f=>f.status==='scheduled'||f.status==='NS'||f.status==='sched');
+  else if(currentFilter==='finished') filtered=allFixtures.filter(f=>f.status==='finished'||f.status==='FT'||f.status==='completed');
   else if(currentFilter==='ours') filtered=allFixtures.filter(f=>
-    ourTeams.includes(f.teams.home.name)||ourTeams.includes(f.teams.away.name));
+    ourTeams.includes(f.home_team)||ourTeams.includes(f.away_team)||
+    ourTeams.includes(f.home_team?.name)||ourTeams.includes(f.away_team?.name));
 
-  // Sort: live first, then by date
+  // Sort: live first, then by kickoff date
   filtered.sort((a,b)=>{
-    const aLive=['1H','2H','HT'].includes(a.fixture.status.short)?0:1;
-    const bLive=['1H','2H','HT'].includes(b.fixture.status.short)?0:1;
+    const aLive=(a.status==='live'||a.status==='in_progress')?0:1;
+    const bLive=(b.status==='live'||b.status==='in_progress')?0:1;
     if(aLive!==bLive) return aLive-bLive;
-    return new Date(a.fixture.date)-new Date(b.fixture.date);
+    const aDate=new Date(a.kickoff_utc||a.date||a.kickoff||0);
+    const bDate=new Date(b.kickoff_utc||b.date||b.kickoff||0);
+    return aDate-bDate;
   });
 
   if(filtered.length===0){
@@ -476,33 +475,39 @@ function renderFixtures(fixturesOverride) {
     return;
   }
 
-  const html=filtered.slice(0,50).map(f=>{
-    const home=f.teams.home.name, away=f.teams.away.name;
-    const hFlag=f.teams.home.flag||'', aFlag=f.teams.away.flag||'';
-    const status=f.fixture.status.short;
-    const isLive=['1H','2H','HT'].includes(status);
-    const isFt=['FT','AET','PEN'].includes(status);
-    const hScore=f.goals.home??'', aScore=f.goals.away??'';
-    const date=new Date(f.fixture.date);
-    const dateStr=date.toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    const round=f.league.round||'';
+  const html=filtered.slice(0,60).map(f=>{
+    // Handle both API response formats flexibly
+    const home = typeof f.home_team==='object' ? f.home_team?.name : (f.home_team||'TBD');
+    const away = typeof f.away_team==='object' ? f.away_team?.name : (f.away_team||'TBD');
+    const hScore = f.home_score??f.score?.home??'';
+    const aScore = f.away_score??f.score?.away??'';
+    const status = f.status||'scheduled';
+    const isLive = status==='live'||status==='in_progress';
+    const isFt   = status==='finished'||status==='FT'||status==='completed';
+    const round  = f.round||f.group_name||f.phase||'';
+    const kickoff= new Date(f.kickoff_utc||f.date||f.kickoff||0);
+    const dateStr= kickoff.toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    const elapsed= f.elapsed||f.minute||'';
+    const venue  = f.stadium||f.venue||'';
 
-    const hOwner=participantForTeam(home), aOwner=participantForTeam(away);
+    const hOwner=participantForTeam(home);
+    const aOwner=participantForTeam(away);
 
     let scoreHTML;
-    if(isLive) scoreHTML=`<div class="score-box">${hScore??0} - ${aScore??0}</div><div class="fixture-meta status-live">● LIVE ${f.fixture.status.elapsed}'</div>`;
+    if(isLive) scoreHTML=`<div class="score-box">${hScore??0} - ${aScore??0}</div><div class="fixture-meta status-live">● LIVE ${elapsed?elapsed+"'":''}</div>`;
     else if(isFt) scoreHTML=`<div class="score-box">${hScore} - ${aScore}</div><div class="fixture-meta status-ft">FT</div>`;
-    else scoreHTML=`<div class="score-box upcoming">${dateStr}</div>`;
+    else scoreHTML=`<div class="score-box upcoming">${kickoff.getFullYear()>2020?dateStr:'TBD'}</div>`;
 
     return `<div class="fixture-card">
       <div class="fixture-team home">
-        <span class="flag">${hFlag}</span>
         <span class="name">${home}</span>
         ${hOwner?`<span class="our-team-badge">⭐ ${hOwner.name}</span>`:''}
       </div>
-      <div class="fixture-score">${scoreHTML}<div class="fixture-meta" style="margin-top:3px;">${round}</div></div>
+      <div class="fixture-score">
+        ${scoreHTML}
+        <div class="fixture-meta" style="margin-top:3px;">${round}${venue?' · '+venue:''}</div>
+      </div>
       <div class="fixture-team away">
-        <span class="flag">${aFlag}</span>
         <span class="name">${away}</span>
         ${aOwner?`<span class="our-team-badge">⭐ ${aOwner.name}</span>`:''}
       </div>
@@ -529,12 +534,14 @@ function autoCalculatePoints() {
   PARTICIPANTS.forEach(p=>{ pts[p]=0; });
 
   allFixtures.forEach(f=>{
-    const status=f.fixture.status.short;
-    if(!['FT','AET','PEN'].includes(status)) return;
+    const status=f.status||'';
+    if(!['finished','FT','completed','AET','PEN'].includes(status)) return;
 
-    const home=f.teams.home.name, away=f.teams.away.name;
-    const hGoals=f.goals.home, aGoals=f.goals.away;
-    const round=f.league.round||'';
+    const home = typeof f.home_team==='object' ? f.home_team?.name : (f.home_team||'');
+    const away = typeof f.away_team==='object' ? f.away_team?.name : (f.away_team||'');
+    const hGoals=f.home_score??f.score?.home??0;
+    const aGoals=f.away_score??f.score?.away??0;
+    const round=f.round||f.group_name||f.phase||'';
 
     const roundPts = round.includes('Group')?1:
                      round.includes('Round of 32')?2:
@@ -556,7 +563,7 @@ function autoCalculatePoints() {
     }
 
     // Final bonus
-    if(round.includes('Final')&&!round.includes('3rd')) {
+    if((round.toLowerCase().includes('final'))&&!round.toLowerCase().includes('3rd')&&!round.toLowerCase().includes('third')) {
       const winner=hGoals>aGoals?home:away;
       const loser=hGoals>aGoals?away:home;
       const wOwner=participantForTeam(winner), lOwner=participantForTeam(loser);
@@ -584,7 +591,8 @@ async function loadGroupStandings(force=false) {
   try {
     const res=await fetch('/.netlify/functions/fixtures?type=standings');
     const data=await res.json();
-    const standings=data.response?.[0]?.league?.standings||[];
+    // wc2026api returns { groups: {...} } or { standings: [...] } or { data: [...] }
+  const standings=data.groups||data.standings||data.data||data.response?.[0]?.league?.standings||[];
     sessionStorage.setItem('wc26_standings',JSON.stringify(standings));
     sessionStorage.setItem('wc26_standings_time',Date.now().toString());
     renderGroupStandings(standings);
@@ -602,9 +610,20 @@ function renderGroupStandings(standings) {
     return;
   }
   const ourTeams=ourTeamNames();
-  const html=standings.map(group=>`
-    <div style="margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:#c9a84c;margin-bottom:8px;text-transform:uppercase;">${group[0]?.group||'Group'}</div>
+  // Handle both array-of-arrays and object formats
+  let groupsArr = [];
+  if(Array.isArray(standings)) {
+    groupsArr = standings;
+  } else if(typeof standings==='object') {
+    // {A:[...], B:[...]} format
+    groupsArr = Object.entries(standings).map(([key,teams])=>({name:'Group '+key, teams}));
+  }
+
+  const html=groupsArr.map(group=>{
+    const groupName = group.name||group.group||(Array.isArray(group)?group[0]?.group:'');
+    const teams = group.teams||(Array.isArray(group)?group:[]);
+    return `<div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:#c9a84c;margin-bottom:8px;text-transform:uppercase;">${groupName||'Group'}</div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead><tr style="background:#1e3a5a;">
           <th style="padding:6px 8px;text-align:left;color:#8ba3c0;">Team</th>
@@ -615,22 +634,30 @@ function renderGroupStandings(standings) {
           <th style="padding:6px 8px;color:#8ba3c0;">GD</th>
           <th style="padding:6px 8px;color:#8ba3c0;">Pts</th>
         </tr></thead>
-        <tbody>${group.map(t=>{
-          const isOurs=ourTeams.includes(t.team.name);
+        <tbody>${teams.map(t=>{
+          const teamName=t.team?.name||t.name||t.team||'';
+          const isOurs=ourTeams.includes(teamName);
+          const played=t.played??t.all?.played??t.mp??0;
+          const won=t.won??t.all?.win??t.w??0;
+          const drawn=t.drawn??t.all?.draw??t.d??0;
+          const lost=t.lost??t.all?.lose??t.l??0;
+          const gd=t.goal_difference??t.goalsDiff??t.gd??0;
+          const pts=t.points??t.pts??0;
           return `<tr style="border-bottom:1px solid #0a1628;${isOurs?'background:#c9a84c11;':''}">
             <td style="padding:6px 8px;color:${isOurs?'#c9a84c':'#d0dce8'};font-weight:${isOurs?'700':'400'};">
-              ${t.team.name}${isOurs?'  ⭐':''}
+              ${teamName}${isOurs?' ⭐':''}
             </td>
-            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${t.all.played}</td>
-            <td style="padding:6px 8px;text-align:center;color:#4caf7d;">${t.all.win}</td>
-            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${t.all.draw}</td>
-            <td style="padding:6px 8px;text-align:center;color:#e57373;">${t.all.lose}</td>
-            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${t.goalsDiff}</td>
-            <td style="padding:6px 8px;text-align:center;font-weight:700;color:#c9a84c;">${t.points}</td>
+            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${played}</td>
+            <td style="padding:6px 8px;text-align:center;color:#4caf7d;">${won}</td>
+            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${drawn}</td>
+            <td style="padding:6px 8px;text-align:center;color:#e57373;">${lost}</td>
+            <td style="padding:6px 8px;text-align:center;color:#8ba3c0;">${gd}</td>
+            <td style="padding:6px 8px;text-align:center;font-weight:700;color:#c9a84c;">${pts}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   document.getElementById('group-standings-container').innerHTML=html;
 }
 
