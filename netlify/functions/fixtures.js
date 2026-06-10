@@ -1,60 +1,56 @@
 const fetch = require("node-fetch");
 
+// Uses wc2026api.com — free tier, no API key needed for basic access
+// Docs: https://www.wc2026api.com
+
+const BASE = "https://api.wc2026api.com";
+
 exports.handler = async function(event) {
-  const API_KEY = process.env.API_FOOTBALL_KEY;
-
-  if (!API_KEY) {
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ error: "API_FOOTBALL_KEY not set in Netlify environment variables" })
-    };
-  }
-
-  const BASE   = "https://v3.football.api-sports.io";
-  const LEAGUE = 1;
-  const SEASON = 2026;
-
-  const reqHeaders = { "x-apisports-key": API_KEY };
   const resHeaders = {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type"
   };
 
-  const type = (event.queryStringParameters && event.queryStringParameters.type) || "fixtures";
+  const type = (event.queryStringParameters && event.queryStringParameters.type) || "matches";
 
   let url;
-
   try {
-    if (type === "debug") {
-      // Returns API account status and which leagues are available on your plan
-      url = `${BASE}/status`;
-    } else if (type === "fixtures" || type === "all") {
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}`;
+    if (type === "matches" || type === "fixtures" || type === "all") {
+      url = `${BASE}/matches`;
     } else if (type === "upcoming") {
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=NS`;
+      url = `${BASE}/matches?status=scheduled`;
     } else if (type === "live") {
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
+      url = `${BASE}/matches?status=live`;
     } else if (type === "finished") {
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=FT-AET-PEN`;
+      url = `${BASE}/matches?status=finished`;
     } else if (type === "today") {
       const today = new Date().toISOString().split("T")[0];
-      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&date=${today}`;
-    } else if (type === "standings") {
-      url = `${BASE}/standings?league=${LEAGUE}&season=${SEASON}`;
-    } else if (type === "topscorers") {
-      url = `${BASE}/players/topscorers?league=${LEAGUE}&season=${SEASON}`;
+      url = `${BASE}/matches?date=${today}`;
+    } else if (type === "standings" || type === "groups") {
+      url = `${BASE}/standings`;
     } else {
-      return { statusCode: 400, headers: resHeaders, body: JSON.stringify({ error: "Unknown type: " + type }) };
+      return {
+        statusCode: 400,
+        headers: resHeaders,
+        body: JSON.stringify({ error: "Unknown type: " + type })
+      };
     }
 
-    const apiRes  = await fetch(url, { method: "GET", headers: reqHeaders });
-    const apiData = await apiRes.json();
+    const apiRes  = await fetch(url, { method: "GET", headers: { "Accept": "application/json" } });
 
-    // Include the URL in response for debugging
-    apiData._debug_url = url;
-    apiData._debug_key_length = API_KEY.length;
+    // If API returns non-JSON (HTML error page), catch it
+    const text = await apiRes.text();
+    let apiData;
+    try {
+      apiData = JSON.parse(text);
+    } catch(e) {
+      return {
+        statusCode: 200,
+        headers: resHeaders,
+        body: JSON.stringify({ error: "API returned non-JSON response", raw: text.substring(0, 300), url })
+      };
+    }
 
     return {
       statusCode: 200,
