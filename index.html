@@ -398,7 +398,7 @@ function renderSweepstakeStandings() {
 async function loadFixtures(force=false) {
   const cached=sessionStorage.getItem('wc26_fixtures');
   const cachedTime=sessionStorage.getItem('wc26_fixtures_time');
-  const AGE=30*60*1000; // 30 min cache
+  const AGE=15*60*1000; // 15 min cache
 
   if(!force && cached && cachedTime && Date.now()-parseInt(cachedTime)<AGE) {
     allFixtures=JSON.parse(cached);
@@ -407,28 +407,51 @@ async function loadFixtures(force=false) {
   }
 
   document.getElementById('fixtures-container').innerHTML=
-    '<div class="loading"><span class="loading-spinner"></span>Fetching latest fixtures from API-Football...</div>';
+    '<div class="loading"><span class="loading-spinner"></span>Fetching fixtures from API-Football...</div>';
 
   try {
-    const res=await fetch('/.netlify/functions/fixtures?type=fixtures');
+    // Use filter-specific endpoints to conserve API requests
+    let endpoint = '/.netlify/functions/fixtures?type=fixtures';
+    if(currentFilter==='live') endpoint='/.netlify/functions/fixtures?type=live';
+    else if(currentFilter==='today') endpoint='/.netlify/functions/fixtures?type=today';
+    else if(currentFilter==='upcoming') endpoint='/.netlify/functions/fixtures?type=upcoming';
+    else if(currentFilter==='finished') endpoint='/.netlify/functions/fixtures?type=finished';
+
+    const res=await fetch(endpoint);
     const data=await res.json();
-    allFixtures=data.response||[];
-    sessionStorage.setItem('wc26_fixtures',JSON.stringify(allFixtures));
-    sessionStorage.setItem('wc26_fixtures_time',Date.now().toString());
-    renderFixtures();
+
+    if(data.error) {
+      document.getElementById('fixtures-container').innerHTML=
+        `<div class="empty-state">API error: ${data.details ? JSON.stringify(data.details) : data.error}<br><br>Check your API key is set in Netlify environment variables.</div>`;
+      return;
+    }
+
+    const fetched = data.response||[];
+
+    // For specific filters store separately, for 'all' and 'ours' we need the full set
+    if(currentFilter==='all'||currentFilter==='ours') {
+      allFixtures=fetched;
+      sessionStorage.setItem('wc26_fixtures',JSON.stringify(allFixtures));
+      sessionStorage.setItem('wc26_fixtures_time',Date.now().toString());
+    } else {
+      // Merge into allFixtures by fixture id to avoid duplicates
+      const ids=new Set(allFixtures.map(f=>f.fixture.id));
+      fetched.forEach(f=>{ if(!ids.has(f.fixture.id)) allFixtures.push(f); });
+    }
+
+    renderFixtures(fetched);
     document.getElementById('fixtures-updated').textContent=
-      'Last updated: '+new Date().toLocaleTimeString();
-    // Auto-calculate points from finished fixtures
+      'Last updated: '+new Date().toLocaleTimeString()+' · '+fetched.length+' matches loaded';
     if(state.drawn) autoCalculatePoints();
   } catch(e) {
     document.getElementById('fixtures-container').innerHTML=
-      '<div class="empty-state">Could not load fixtures. Check your connection or try refreshing.</div>';
+      `<div class="empty-state">Could not connect to the API. Make sure the site is deployed on Netlify and the API key is set.<br><br>Error: ${e.message}</div>`;
   }
 }
 
-function renderFixtures() {
+function renderFixtures(fixturesOverride) {
   const now=new Date();
-  let filtered=allFixtures;
+  let filtered=fixturesOverride||allFixtures;
   const ourTeams=ourTeamNames();
 
   if(currentFilter==='live') filtered=allFixtures.filter(f=>f.fixture.status.short==='1H'||f.fixture.status.short==='2H'||f.fixture.status.short==='HT');
@@ -493,7 +516,10 @@ function filterFixtures(type, btn) {
   currentFilter=type;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  renderFixtures();
+  // Clear cache to force fresh API call for new filter
+  sessionStorage.removeItem('wc26_fixtures');
+  sessionStorage.removeItem('wc26_fixtures_time');
+  loadFixtures(true);
 }
 
 // ── Auto-calculate points ─────────────────────────────────────────────────

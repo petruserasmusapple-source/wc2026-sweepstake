@@ -22,9 +22,23 @@ exports.handler = async function(event, context) {
 
   try {
     let url;
+
     if (type === "fixtures") {
-      // All fixtures for the tournament
+      // All fixtures — NS = not started, includes upcoming matches
       url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}`;
+    } else if (type === "upcoming") {
+      // Only upcoming (not started) fixtures
+      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=NS`;
+    } else if (type === "live") {
+      // Only live fixtures
+      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&live=all`;
+    } else if (type === "finished") {
+      // Only finished fixtures
+      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&status=FT-AET-PEN`;
+    } else if (type === "today") {
+      // Today's fixtures
+      const today = new Date().toISOString().split("T")[0];
+      url = `${BASE}/fixtures?league=${LEAGUE}&season=${SEASON}&date=${today}`;
     } else if (type === "standings") {
       url = `${BASE}/standings?league=${LEAGUE}&season=${SEASON}`;
     } else if (type === "topscorers") {
@@ -35,6 +49,15 @@ exports.handler = async function(event, context) {
 
     const res  = await fetch(url, { headers });
     const data = await res.json();
+
+    // Return error details if API responds with errors
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      return {
+        statusCode: 200,
+        headers: cors,
+        body: JSON.stringify({ error: "API error", details: data.errors, response: [] })
+      };
+    }
 
     return {
       statusCode: 200,
