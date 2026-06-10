@@ -1,9 +1,5 @@
 const fetch = require("node-fetch");
 
-// Uses openfootball/worldcup.json on GitHub Raw
-// Completely free, no API key, no auth required
-// Updated by the community as scores come in
-
 const FIXTURES_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json";
 const GROUPS_URL   = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.groups.json";
 
@@ -17,37 +13,35 @@ exports.handler = async function(event) {
   const type = (event.queryStringParameters && event.queryStringParameters.type) || "fixtures";
 
   try {
-    let url = type === "groups" ? GROUPS_URL : FIXTURES_URL;
+    const url = (type === "groups") ? GROUPS_URL : FIXTURES_URL;
 
-    const apiRes = await fetch(url);
-    const text   = await apiRes.text();
+    const apiRes = await fetch(url, {
+      headers: { "User-Agent": "netlify-function" }
+    });
 
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch(e) {
+    if (!apiRes.ok) {
       return {
         statusCode: 200,
         headers: resHeaders,
-        body: JSON.stringify({ error: "Could not parse JSON from openfootball", raw: text.substring(0, 200) })
+        body: JSON.stringify({ error: "GitHub fetch failed", status: apiRes.status, url })
       };
     }
 
-    // For fixtures, apply filtering server-side based on type
-    if (type !== "groups" && data.matches) {
-      const today = new Date().toISOString().split("T")[0];
+    const data = await apiRes.json();
 
+    // Server-side filter based on type
+    if (data.matches) {
+      const today = new Date().toISOString().split("T")[0];
       if (type === "upcoming") {
-        data.matches = data.matches.filter(m => !m.score || Object.keys(m.score).length === 0);
+        data.matches = data.matches.filter(m => !m.score || !m.score.ft);
       } else if (type === "finished") {
         data.matches = data.matches.filter(m => m.score && m.score.ft);
       } else if (type === "today") {
         data.matches = data.matches.filter(m => m.date === today);
       } else if (type === "live") {
-        // openfootball doesn't do live scores — return today's matches as proxy
-        data.matches = data.matches.filter(m => m.date === today);
+        data.matches = data.matches.filter(m => m.date === today && (!m.score || !m.score.ft));
       }
-      // "fixtures" / "all" returns everything unfiltered
+      // "fixtures" / "all" — return everything
     }
 
     return {
