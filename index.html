@@ -249,28 +249,28 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a1628; color: #
 <script>
 // ── Data ──────────────────────────────────────────────────────────────────
 const TOP_TEAMS = [
-  {name:'France',      flag:'🇫🇷', rank:1},
-  {name:'Spain',       flag:'🇪🇸', rank:2},
-  {name:'Argentina',   flag:'🇦🇷', rank:3},
-  {name:'England',     flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', rank:4},
-  {name:'Portugal',    flag:'🇵🇹', rank:5},
-  {name:'Brazil',      flag:'🇧🇷', rank:6},
-  {name:'Netherlands', flag:'🇳🇱', rank:7},
-  {name:'Morocco',     flag:'🇲🇦', rank:8},
-  {name:'Belgium',     flag:'🇧🇪', rank:9},
-  {name:'Germany',     flag:'🇩🇪', rank:10},
+  {name:'France',      flag:'🇫🇷', rank:1,  group:'I'},
+  {name:'Spain',       flag:'🇪🇸', rank:2,  group:'H'},
+  {name:'Argentina',   flag:'🇦🇷', rank:3,  group:'J'},
+  {name:'England',     flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', rank:4,  group:'L'},
+  {name:'Portugal',    flag:'🇵🇹', rank:5,  group:'K'},
+  {name:'Brazil',      flag:'🇧🇷', rank:6,  group:'C'},
+  {name:'Netherlands', flag:'🇳🇱', rank:7,  group:'F'},
+  {name:'Morocco',     flag:'🇲🇦', rank:8,  group:'C'},
+  {name:'Belgium',     flag:'🇧🇪', rank:9,  group:'G'},
+  {name:'Germany',     flag:'🇩🇪', rank:10, group:'E'},
 ];
 const BOT_TEAMS = [
-  {name:'New Zealand', flag:'🇳🇿', rank:48},
-  {name:'Qatar',       flag:'🇶🇦', rank:47},
-  {name:'Uzbekistan',  flag:'🇺🇿', rank:46},
-  {name:'Congo DR',    flag:'🇨🇩', rank:45},
-  {name:'Saudi Arabia',flag:'🇸🇦', rank:44},
-  {name:'El Salvador', flag:'🇸🇻', rank:43},
-  {name:'Panama',      flag:'🇵🇦', rank:42},
-  {name:'Bolivia',     flag:'🇧🇴', rank:41},
-  {name:'Egypt',       flag:'🇪🇬', rank:40},
-  {name:'Canada',      flag:'🇨🇦', rank:39},
+  {name:'New Zealand', flag:'🇳🇿', rank:48, group:'G'},
+  {name:'Qatar',       flag:'🇶🇦', rank:47, group:'B'},
+  {name:'Uzbekistan',  flag:'🇺🇿', rank:46, group:'K'},
+  {name:'DR Congo',    flag:'🇨🇩', rank:45, group:'K'},
+  {name:'Saudi Arabia',flag:'🇸🇦', rank:44, group:'H'},
+  {name:'Haiti',       flag:'🇭🇹', rank:43, group:'C'},
+  {name:'Panama',      flag:'🇵🇦', rank:42, group:'L'},
+  {name:'South Africa',flag:'🇿🇦', rank:41, group:'A'},
+  {name:'Egypt',       flag:'🇪🇬', rank:40, group:'G'},
+  {name:'Canada',      flag:'🇨🇦', rank:39, group:'B'},
 ];
 const PARTICIPANTS = ['Petrus','Neda','Gemma','Max','Tinashe','Nkulu','Matt','Simba','Zenon'];
 
@@ -426,13 +426,11 @@ async function loadFixtures(force=false) {
       return;
     }
 
-    // wc2026api returns { matches: [...] } or { data: [...] } or array directly
-    const fetched = data.matches || data.data || data.results || (Array.isArray(data)?data:[]);
-
+    // openfootball returns { name, matches: [...] }
+    const fetched = data.matches || [];
     allFixtures=fetched;
     sessionStorage.setItem('wc26_fixtures',JSON.stringify(allFixtures));
     sessionStorage.setItem('wc26_fixtures_time',Date.now().toString());
-
     renderFixtures();
     document.getElementById('fixtures-updated').textContent=
       'Last updated: '+new Date().toLocaleTimeString()+' · '+fetched.length+' matches loaded';
@@ -447,28 +445,27 @@ function renderFixtures(fixturesOverride) {
   const now=new Date();
   let filtered=fixturesOverride||allFixtures;
   const ourTeams=ourTeamNames();
+  const todayStr=now.toISOString().split('T')[0];
 
-  // wc2026api uses status: "scheduled", "live", "finished"
-  if(currentFilter==='live') filtered=allFixtures.filter(f=>f.status==='live'||f.status==='in_progress');
-  else if(currentFilter==='today') filtered=allFixtures.filter(f=>{
-    const d=new Date(f.kickoff_utc||f.date||f.kickoff);
-    return d.toDateString()===now.toDateString();
-  });
-  else if(currentFilter==='upcoming') filtered=allFixtures.filter(f=>f.status==='scheduled'||f.status==='NS'||f.status==='sched');
-  else if(currentFilter==='finished') filtered=allFixtures.filter(f=>f.status==='finished'||f.status==='FT'||f.status==='completed');
-  else if(currentFilter==='ours') filtered=allFixtures.filter(f=>
-    ourTeams.includes(f.home_team)||ourTeams.includes(f.away_team)||
-    ourTeams.includes(f.home_team?.name)||ourTeams.includes(f.away_team?.name));
+  // openfootball format: {team1, team2, date, time, round, score:{ft:[h,a]}}
+  const hasScore = f => f.score && f.score.ft && f.score.ft.length===2;
 
-  // Sort: live first, then by kickoff date
-  filtered.sort((a,b)=>{
-    const aLive=(a.status==='live'||a.status==='in_progress')?0:1;
-    const bLive=(b.status==='live'||b.status==='in_progress')?0:1;
-    if(aLive!==bLive) return aLive-bLive;
-    const aDate=new Date(a.kickoff_utc||a.date||a.kickoff||0);
-    const bDate=new Date(b.kickoff_utc||b.date||b.kickoff||0);
-    return aDate-bDate;
-  });
+  if(currentFilter==='live') {
+    filtered=allFixtures.filter(f=>f.date===todayStr && !hasScore(f));
+  } else if(currentFilter==='today') {
+    filtered=allFixtures.filter(f=>f.date===todayStr);
+  } else if(currentFilter==='upcoming') {
+    filtered=allFixtures.filter(f=>!hasScore(f));
+  } else if(currentFilter==='finished') {
+    filtered=allFixtures.filter(f=>hasScore(f));
+  } else if(currentFilter==='ours') {
+    filtered=allFixtures.filter(f=>ourTeams.some(t=>
+      f.team1===t||f.team2===t||
+      (f.team1&&f.team1.includes(t))||(f.team2&&f.team2.includes(t))));
+  }
+
+  // Sort by date
+  filtered.sort((a,b)=>new Date(a.date+' '+(a.time||'00:00'))-new Date(b.date+' '+(b.time||'00:00')));
 
   if(filtered.length===0){
     document.getElementById('fixtures-container').innerHTML='<div class="empty-state">No fixtures found for this filter.</div>';
@@ -476,27 +473,19 @@ function renderFixtures(fixturesOverride) {
   }
 
   const html=filtered.slice(0,60).map(f=>{
-    // Handle both API response formats flexibly
-    const home = typeof f.home_team==='object' ? f.home_team?.name : (f.home_team||'TBD');
-    const away = typeof f.away_team==='object' ? f.away_team?.name : (f.away_team||'TBD');
-    const hScore = f.home_score??f.score?.home??'';
-    const aScore = f.away_score??f.score?.away??'';
-    const status = f.status||'scheduled';
-    const isLive = status==='live'||status==='in_progress';
-    const isFt   = status==='finished'||status==='FT'||status==='completed';
-    const round  = f.round||f.group_name||f.phase||'';
-    const kickoff= new Date(f.kickoff_utc||f.date||f.kickoff||0);
-    const dateStr= kickoff.toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    const elapsed= f.elapsed||f.minute||'';
-    const venue  = f.stadium||f.venue||'';
+    const home=f.team1||'TBD', away=f.team2||'TBD';
+    const isFt=hasScore(f);
+    const hScore=isFt?f.score.ft[0]:'';
+    const aScore=isFt?f.score.ft[1]:'';
+    const round=f.round||'';
+    const dateStr=f.date?(new Date(f.date+' '+(f.time||'12:00'))).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+(f.time?' · '+f.time:''):'TBD';
 
     const hOwner=participantForTeam(home);
     const aOwner=participantForTeam(away);
 
-    let scoreHTML;
-    if(isLive) scoreHTML=`<div class="score-box">${hScore??0} - ${aScore??0}</div><div class="fixture-meta status-live">● LIVE ${elapsed?elapsed+"'":''}</div>`;
-    else if(isFt) scoreHTML=`<div class="score-box">${hScore} - ${aScore}</div><div class="fixture-meta status-ft">FT</div>`;
-    else scoreHTML=`<div class="score-box upcoming">${kickoff.getFullYear()>2020?dateStr:'TBD'}</div>`;
+    const scoreHTML=isFt
+      ?`<div class="score-box">${hScore} - ${aScore}</div><div class="fixture-meta status-ft">FT</div>`
+      :`<div class="score-box upcoming">${dateStr}</div>`;
 
     return `<div class="fixture-card">
       <div class="fixture-team home">
@@ -505,7 +494,7 @@ function renderFixtures(fixturesOverride) {
       </div>
       <div class="fixture-score">
         ${scoreHTML}
-        <div class="fixture-meta" style="margin-top:3px;">${round}${venue?' · '+venue:''}</div>
+        <div class="fixture-meta" style="margin-top:3px;">${round}</div>
       </div>
       <div class="fixture-team away">
         <span class="name">${away}</span>
@@ -534,14 +523,10 @@ function autoCalculatePoints() {
   PARTICIPANTS.forEach(p=>{ pts[p]=0; });
 
   allFixtures.forEach(f=>{
-    const status=f.status||'';
-    if(!['finished','FT','completed','AET','PEN'].includes(status)) return;
-
-    const home = typeof f.home_team==='object' ? f.home_team?.name : (f.home_team||'');
-    const away = typeof f.away_team==='object' ? f.away_team?.name : (f.away_team||'');
-    const hGoals=f.home_score??f.score?.home??0;
-    const aGoals=f.away_score??f.score?.away??0;
-    const round=f.round||f.group_name||f.phase||'';
+    if(!f.score||!f.score.ft||f.score.ft.length!==2) return;
+    const home=f.team1||'', away=f.team2||'';
+    const hGoals=f.score.ft[0], aGoals=f.score.ft[1];
+    const round=f.round||'';
 
     const roundPts = round.includes('Group')?1:
                      round.includes('Round of 32')?2:
@@ -563,7 +548,7 @@ function autoCalculatePoints() {
     }
 
     // Final bonus
-    if((round.toLowerCase().includes('final'))&&!round.toLowerCase().includes('3rd')&&!round.toLowerCase().includes('third')) {
+    if(round==='Final') {
       const winner=hGoals>aGoals?home:away;
       const loser=hGoals>aGoals?away:home;
       const wOwner=participantForTeam(winner), lOwner=participantForTeam(loser);
@@ -589,10 +574,10 @@ async function loadGroupStandings(force=false) {
   }
 
   try {
-    const res=await fetch('/.netlify/functions/fixtures?type=standings');
+    const res=await fetch('/.netlify/functions/fixtures?type=groups');
     const data=await res.json();
-    // wc2026api returns { groups: {...} } or { standings: [...] } or { data: [...] }
-  const standings=data.groups||data.standings||data.data||data.response?.[0]?.league?.standings||[];
+    // openfootball groups format: {name, groups:[{name, teams:[...]}]}
+  const standings=data.groups||data.standings||data.data||[];
     sessionStorage.setItem('wc26_standings',JSON.stringify(standings));
     sessionStorage.setItem('wc26_standings_time',Date.now().toString());
     renderGroupStandings(standings);
